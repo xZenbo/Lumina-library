@@ -40,8 +40,9 @@ local function MakeDraggable(Frame, Handle)
     end)
 end
 
-local function MakeResizable(Frame, Handle)
+local function MakeResizable(Frame, Handle, MaxSize)
     local Resizing, DragStart, StartSize
+    
     Handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             Resizing = true
@@ -49,6 +50,27 @@ local function MakeResizable(Frame, Handle)
             StartSize = Frame.Size
         end
     end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if Resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local Delta = input.Position - DragStart
+            
+            -- Calculate new dimensions
+            local NewX = math.clamp(StartSize.X.Offset + Delta.X, 400, MaxSize.X)
+            local NewY = math.clamp(StartSize.Y.Offset + Delta.Y, 250, MaxSize.Y)
+            
+            Frame.Size = UDim2.new(0, NewX, 0, NewY)
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then 
+            Resizing = false 
+        end
+    end)
+end
+
+    
     UserInputService.InputChanged:Connect(function(input)
         if Resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
             local Delta = input.Position - DragStart
