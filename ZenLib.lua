@@ -91,6 +91,7 @@ end
 
 -- Tab Constructor
 function Lumina:CreateTab(Name)
+    assert(self and self.Tabs, "Lumina: CreateTab must be called with a colon (:), not a dot (.)")
     local Tab = {}
     
     -- Tab Button
