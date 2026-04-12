@@ -54,7 +54,7 @@ function Lumina.CreateWindow(Config)
     -- Root
     self.Gui = Instance.new("ScreenGui")
     self.Gui.Name = "LuminaLib"
-    self.Gui.Parent = (RunService:IsStudio() and game.Players.LocalPlayer.PlayerGui) or CoreGui
+    self.Gui.Parent = game.Players.LocalPlayer.PlayerGui or CoreGui
     
     -- Main Frame
     self.Main = Instance.new("Frame")
