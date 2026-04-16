@@ -54,7 +54,7 @@ local Presets = {
 }
 
 local ConfigData = {}
-local ConfigName = "Lumina_Config_V5.json"
+local ConfigName = "Lumina_Config.json"
 
 local function SaveConfig()
     if writefile then
@@ -157,7 +157,7 @@ function Lumina.CreateWindow(Config)
     Topbar.Parent = self.Main
     
     local Title = Instance.new("TextLabel")
-    Title.Text = Config.Name or "Lumina V5"
+    Title.Text = Config.Name or "Lumina"
     Title.Size = UDim2.new(1, -20, 1, 0)
     Title.Position = UDim2.new(0, 15, 0, 0)
     Title.BackgroundTransparency = 1
