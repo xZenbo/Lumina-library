@@ -25,10 +25,10 @@ Sections are perfect for grouping multiple UI elements within a tab. They can no
 
 ```lua
 -- Creates an uncollapsible section
-local CombatSection = MainTab:CreateSection("Combat Settings", false)
+local CombatSection = MainTab:CreateSection("Combat Settings", false, "lucide-icon")
 
 -- Creates a collapsible section (by clicking the + / - header)
-local CollapsibleSec = MainTab:CreateSection("Extra Settings", true)
+local CollapsibleSec = MainTab:CreateSection("Extra Settings", true, "lucide-icon")
 ```
 
 ## Labels
@@ -36,7 +36,7 @@ local CollapsibleSec = MainTab:CreateSection("Extra Settings", true)
 Labels are non-interactive text elements used to display information or titles within your UI.
 
 ```lua
-MainTab:CreateLabel("Please make sure to inject before executing!")
+MainTab:CreateLabel("Please make sure to inject before executing!", "lucide-icon")
 ```
 
 ## Buttons
@@ -158,7 +158,7 @@ MyDropdown:Set("Blatant")
 Lumina automatically generates a 'Settings' tab. This tab includes Keybinds, Theme Presets, and an integrated advanced File-based Configuration system per-game (using game.PlaceId). You no longer need to manually create theme managers or config handlers.
 
 ```lua
--- The Settings tab is automatically injected at the bottom of your UI.
+-- The Settings tab is automatically injected in the top bar of your UI.
 -- Users can Create, Load, and Save configs directly from the UI.
 -- Configs are saved in 'workspace/Lumina/Configs/[PlaceId]' 
 -- to natively support multiple games!
