@@ -9,10 +9,11 @@ local Lumina = loadstring(game:HttpGet("https://raw.githubusercontent.com/xZenbo
 
 local Window = Lumina.CreateWindow({
     Name = "Lumina Hub",
-    Keybind = Enum.KeyCode.RightShift,
     MaxSize = Vector2.new(900, 700),
     CustomTheme = false, -- Set to true to enable custom color pickers in the Settings tab
-    UseCanvasGroup = true -- Toggles CanvasGroup for the main window (premium fade & opacity effects)
+    UseCanvasGroup = true, -- Toggles CanvasGroup for the main window (premium fade & opacity effects)
+    Icon = "eclipse" -- Loading and open ui button icon | Lucide icons
+    -- Keybind = Enum.KeyCode.LeftControl |  Ui keybind. Default is left ctrl if not set in createwindow
 })
 
 local MainTab = Window:CreateTab("Main", "lucide-home")
