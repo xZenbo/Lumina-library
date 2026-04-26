@@ -152,7 +152,7 @@ else
     Lumina.AutoSave = false
 end
 
-Lumina.GradientEnabled = ConfigData["Lumina_GradientEffect"] or false
+Lumina.GradientEnabled = ConfigData["Lumina_GradientEffect"] or true
 Lumina._Gradients = {}
 
 local function Register(obj, category, prop)
