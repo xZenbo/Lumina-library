@@ -5,7 +5,7 @@
 Learn how to initialize Lumina and create a working user interface.
 
 ```lua
-local Lumina = loadstring(game:HttpGet("YOUR_URL_HERE"))()
+local Lumina = loadstring(game:HttpGet("https://raw.githubusercontent.com/xZenbo/Lumina-library/refs/heads/main/Lumina.lua"))()
 
 local Window = Lumina.CreateWindow({
     Name = "Lumina Hub",
