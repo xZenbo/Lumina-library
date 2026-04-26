@@ -178,10 +178,5 @@ Lumina:Notify({
     Duration = 4, -- Seconds until disappearance
     Icon = "lucide-triangle-alert" -- Uses built-in Lucide icons
 })
-
--- Fully destroy and cleanup the entire UI
-SettingsTab:CreateButton("Destroy UI", function()
-    Lumina:Destroy()
-end)
 ```
 
