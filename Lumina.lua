@@ -1,3 +1,6 @@
+-- [[ LUMINA UI LIBRARY - THE DEFINITIVE EXPERIENCE ]]
+-- [Features: Glassmorphism Blur, Advanced Easing, Dynamic Shadows, Auto-Config, Sections]
+
 local Lumina = {}
 Lumina.__index = Lumina
 Lumina.Windows = {}
@@ -74,6 +77,7 @@ local Presets = {
     ["Custom"] = {}
 }
 
+-- [[ AUTO-CONFIG SYSTEM ]]
 local ConfigData = {}
 local FolderPath = "Lumina"
 local GameFolderStr = "Configs/" .. tostring(game.PlaceId)
@@ -223,7 +227,7 @@ local function UpdateTheme(category, color)
                 i = i + 1
                 batchCounter = batchCounter + 1
                 if batchCounter % 50 == 0 then
-                    task.wait() 
+                    task.wait() -- Yield to prevent freezing on huge updates
                 end
             else
                 table.remove(ThemeRegistry[category], i)
@@ -231,11 +235,13 @@ local function UpdateTheme(category, color)
         end
     end
     
+    -- Update Gradients!
     if category == "GradientEdge" or category == "Accent" or category == "Stroke" then
         UpdateGradients()
     end
 end
 
+-- [[ ADVANCED EASING UTILITY ]]
 local function CreateTween(instance, properties, duration, style, direction)
     local tInfo = TweenInfo.new(duration or 0.3, style or Enum.EasingStyle.Quart, direction or Enum.EasingDirection.Out)
     local tween = TweenService:Create(instance, tInfo, properties)
@@ -268,32 +274,36 @@ local function ApplyBounce(Clickable, TargetFrame)
     end)
 end
 
-local function MakeDraggable(Frame, Handle)
+local function MakeDraggable(Frame, Handle, Window)
     local Dragging, DragStart, StartPos
     Handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             Dragging = true; DragStart = input.Position; StartPos = Frame.Position
         end
     end)
-    UserInputService.InputChanged:Connect(function(input)
+    local c1 = UserInputService.InputChanged:Connect(function(input)
         if Dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local Delta = input.Position - DragStart
             Frame.Position = UDim2.new(StartPos.X.Scale, StartPos.X.Offset + Delta.X, StartPos.Y.Scale, StartPos.Y.Offset + Delta.Y)
         end
     end)
-    UserInputService.InputEnded:Connect(function(input)
+    local c2 = UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then Dragging = false end
     end)
+    if Window and type(Window) == "table" and Window.Connections then
+        table.insert(Window.Connections, c1)
+        table.insert(Window.Connections, c2)
+    end
 end
 
-local function MakeResizable(Frame, Handle, MinSize, MaxSize)
+local function MakeResizable(Frame, Handle, MinSize, MaxSize, Window)
     local Dragging, DragStart, StartSize
     Handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             Dragging = true; DragStart = input.Position; StartSize = Frame.AbsoluteSize
         end
     end)
-    UserInputService.InputChanged:Connect(function(input)
+    local c1 = UserInputService.InputChanged:Connect(function(input)
         if Dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local Delta = input.Position - DragStart
             local newWidth = math.clamp(StartSize.X + Delta.X, MinSize.X, MaxSize.X)
@@ -301,9 +311,13 @@ local function MakeResizable(Frame, Handle, MinSize, MaxSize)
             Frame.Size = UDim2.new(0, newWidth, 0, newHeight)
         end
     end)
-    UserInputService.InputEnded:Connect(function(input)
+    local c2 = UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then Dragging = false end
     end)
+    if Window and type(Window) == "table" and Window.Connections then
+        table.insert(Window.Connections, c1)
+        table.insert(Window.Connections, c2)
+    end
 end
 
 function Lumina.CreateWindow(Config)
@@ -333,13 +347,13 @@ function Lumina.CreateWindow(Config)
     self.Gui.Parent = gethui()
     
     self.UseCanvasGroup = Config.UseCanvasGroup
-    if self.UseCanvasGroup == nil then self.UseCanvasGroup = true end 
+    if self.UseCanvasGroup == nil then self.UseCanvasGroup = true end -- Default to true for premium fade
 
     self.Main = Instance.new(self.UseCanvasGroup and "CanvasGroup" or "Frame")
     self.Main.Size = UDim2.new(0, 650, 0, 450)
     self.Main.Position = UDim2.new(0.5, -325, 0.5, -225)
     
-    local targetBgTrans = 0.05 
+    local targetBgTrans = 0.05 -- slight transparency to make CanvasGroup shine
     
     if self.UseCanvasGroup then
         self.Main.GroupTransparency = 1
@@ -467,9 +481,10 @@ function Lumina.CreateWindow(Config)
     ResizeHandle.ImageTransparency = 0.5
     Register(ResizeHandle, "SecondaryText", "ImageColor3")
     
-    MakeDraggable(self.Main, Topbar)
-    MakeResizable(self.Main, ResizeHandle, Vector2.new(450, 300), MaxSize)
+    MakeDraggable(self.Main, Topbar, self)
+    MakeResizable(self.Main, ResizeHandle, Vector2.new(450, 300), MaxSize, self)
 
+    -- Floating Minimized Toggle
     self.MobileToggle = Instance.new("TextButton")
     self.MobileToggle.Size = UDim2.new(0, 46, 0, 46)
     self.MobileToggle.Position = UDim2.new(0.5, -23, 0, 15)
@@ -516,7 +531,7 @@ function Lumina.CreateWindow(Config)
         CreateTween(MobileToggleScale, {Scale = 1.05}, 0.15)
     end)
 
-    MakeDraggable(self.MobileToggle, self.MobileToggle)
+    MakeDraggable(self.MobileToggle, self.MobileToggle, self)
 
     self.MobileToggle.MouseButton1Click:Connect(function()
         self:SetVisible(true)
@@ -603,6 +618,7 @@ function Lumina.CreateWindow(Config)
     end)
     table.insert(self.Connections, toggleConn)
 
+    -- Static container for Notifications
     self.ToastContainer = Instance.new("Frame")
     self.ToastContainer.Size = UDim2.new(0, 300, 1, -40)
     self.ToastContainer.Position = UDim2.new(1, -320, 0, 20)
@@ -613,6 +629,7 @@ function Lumina.CreateWindow(Config)
     ToastLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
     ToastLayout.Padding = UDim.new(0, 10)
 
+    -- [[ LOADING SCREEN INJECTION ]]
     local Splash = Instance.new("Frame", self.Gui)
     Splash.Size = UDim2.new(0, 260, 0, 120)
     Splash.Position = UDim2.new(0.5, -130, 0.5, -60)
@@ -646,6 +663,7 @@ function Lumina.CreateWindow(Config)
     SplashBarFill.Size = UDim2.new(0, 0, 1, 0)
     Register(SplashBarFill, "Accent", "BackgroundColor3")
 
+    -- Initially hide main globally by moving it offscreen
     local startPos = self.Main.Position
     self.Main.Position = UDim2.new(2, 0, 2, 0)
     self.Main.Visible = true
@@ -653,6 +671,7 @@ function Lumina.CreateWindow(Config)
 
     task.spawn(function()
         task.wait(0.2)
+        -- Animate bar
         CreateTween(SplashBarFill, {Size = UDim2.new(0.4, 0, 1, 0)}, 0.4, Enum.EasingStyle.Quart)
         task.wait(0.3)
         CreateTween(SplashBarFill, {Size = UDim2.new(0.8, 0, 1, 0)}, 0.6, Enum.EasingStyle.Quart)
@@ -660,6 +679,7 @@ function Lumina.CreateWindow(Config)
         CreateTween(SplashBarFill, {Size = UDim2.new(1, 0, 1, 0)}, 0.2, Enum.EasingStyle.Quart)
         task.wait(0.25)
         
+        -- Explode Splash away
         CreateTween(Splash, {Size = UDim2.new(0, 300, 0, 140), Position = UDim2.new(0.5, -150, 0.5, -70), BackgroundTransparency = 1}, 0.4, Enum.EasingStyle.Back, Enum.EasingDirection.In)
         for _, obj in pairs(Splash:GetDescendants()) do
             if obj:IsA("TextLabel") then CreateTween(obj, {TextTransparency = 1}, 0.3)
@@ -670,10 +690,12 @@ function Lumina.CreateWindow(Config)
         
         task.wait(0.35)
         
+        -- Hide inactive tabs that were visible just to compute layout sizes
         for _, t in pairs(self.Tabs) do
             if self.ActiveTab ~= t then t.Frame.Visible = false end
         end
 
+        -- Open Main UI beautifully
         local finalPos = startPos
         local Scale = self.Main:FindFirstChild("WindowScale")
         if Scale then Scale.Scale = GetTargetScale() * 0.8 end
@@ -703,6 +725,7 @@ function Lumina.CreateWindow(Config)
         ApplyIcon(SettingsOpenBtn, "lucide-settings")
         Register(SettingsOpenBtn, "SecondaryText", "ImageColor3")
         
+        -- Hover effects
         SettingsOpenBtn.MouseEnter:Connect(function() CreateTween(SettingsOpenBtn, {ImageTransparency = 0.5}, 0.2) end)
         SettingsOpenBtn.MouseLeave:Connect(function() CreateTween(SettingsOpenBtn, {ImageTransparency = 0}, 0.2) end)
         
@@ -788,7 +811,29 @@ function Lumina.CreateWindow(Config)
                 if writefile then pcall(function() writefile(FolderPath .. "/" .. GameFolderStr .. "/Autoload.txt", "") end) end
             end
         end, true, "Automatically loads this configuration on launch")
-        SettingsTab:CreateButton("Destroy UI", function()
+
+        local UtilitySec = SettingsTab:CreateSection("Utility", true)
+        
+        local afkConnection
+        UtilitySec:CreateToggle("Anti-AFK", true, function(toggled)
+            if toggled then
+                local currentCamera = game.Workspace.CurrentCamera
+                local virtualUser = game:GetService("VirtualUser")
+                local lp = game:GetService("Players").LocalPlayer
+                afkConnection = lp.Idled:Connect(function()
+                    virtualUser:Button2Down(Vector2.zero, currentCamera.CFrame)
+                    task.wait(1)
+                    virtualUser:Button2Up(Vector2.zero, currentCamera.CFrame)
+                end)
+            else
+                if afkConnection then
+                    afkConnection:Disconnect()
+                    afkConnection = nil
+                end
+            end
+        end, true, "Prevents Roblox from disconnecting you for being idle.")
+
+        UtilitySec:CreateButton("Destroy UI", function()
             Lumina:Destroy()
         end)
     end)
@@ -865,6 +910,7 @@ function Lumina:Notify(Options)
     ContentLabel.TextTransparency = 1
     Register(ContentLabel, "SecondaryText", "TextColor3")
     
+    -- Animation IN
     CreateTween(Toast, {BackgroundTransparency = 0.05}, 0.3)
     CreateTween(Stroke, {Transparency = 0.5}, 0.3)
     CreateTween(Icon, {ImageTransparency = 0}, 0.3)
@@ -872,6 +918,7 @@ function Lumina:Notify(Options)
     CreateTween(ContentLabel, {TextTransparency = 0}, 0.3)
     CreateTween(ToastScale, {Scale = 1}, 0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
     
+    -- Timer Anim
     CreateTween(ProgressFill, {Size = UDim2.new(0, 0, 1, 0)}, Duration, Enum.EasingStyle.Linear)
     
     task.delay(Duration, function()
@@ -896,6 +943,14 @@ function Lumina:Destroy()
         return
     end
 
+    if self.Toggles then
+        for _, toggle in ipairs(self.Toggles) do
+            if toggle.Get ~= nil and toggle:Get() == true then
+                pcall(function() toggle:Set(false) end)
+            end
+        end
+    end
+
     if self.Connections then
         for _, conn in ipairs(self.Connections) do 
             if typeof(conn) == "RBXScriptConnection" then conn:Disconnect() end 
@@ -904,6 +959,7 @@ function Lumina:Destroy()
     if self.Gui then self.Gui:Destroy() end
 end
 
+    -- [[ COMPONENT BUILDER ]]
 local function RenderComponentBase(TargetParent, Height, InfoText, TitleText)
     local Frame = Instance.new("Frame")
     Frame.Size = UDim2.new(1, -14, 0, Height)
@@ -957,7 +1013,7 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
         local TabIcon = Instance.new("ImageLabel", TabBtn)
         TabIcon.Name = "Icon"
         TabIcon.Size = UDim2.new(0, 16, 0, 16)
-        TabIcon.Position = UDim2.new(0, -24, 0.5, -8)
+        TabIcon.Position = UDim2.new(0, -24, 0.5, -8) -- Anchored absolutely away from padding
         TabIcon.BackgroundTransparency = 1
         ApplyIcon(TabIcon, IconName)
         if not IconName then TabIcon.Visible = false end
@@ -969,7 +1025,7 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
     local TabFrame = Instance.new("ScrollingFrame")
     TabFrame.Size = UDim2.new(1, 0, 1, 0)
     TabFrame.BackgroundTransparency = 1
-    TabFrame.Visible = true
+    TabFrame.Visible = true -- Compute layouts automatically!
     TabFrame.ScrollBarThickness = 2
     TabFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
     TabFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
@@ -1054,6 +1110,7 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
 
     ApplyBounce(TabBtn)
 
+    -- [[ TAB METHODS (Including Sections and Labels) ]]
     function Tab:CreateLabel(Text, IconName)
         Tab.LayoutOrder = Tab.LayoutOrder + 1
         local ParentFrame = self.TargetParent or TabFrame
@@ -1189,10 +1246,12 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
             end)
         end
         
+        -- Initial evaluation 
         task.defer(function()
             SecFrame.Size = UDim2.new(1, -14, 0, SecLayout.AbsoluteContentSize.Y + 46)
         end)
 
+        -- Mirror tab methods to append to the Section's container instead
         local ProxyTab = setmetatable({}, {__index = Tab})
         ProxyTab.TargetParent = SecContainer
         return ProxyTab
@@ -1236,6 +1295,7 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
         Tab.LayoutOrder = Tab.LayoutOrder + 1
         local ParentFrame = self.TargetParent or TabFrame
         
+        -- Load Config
         if ConfigData[FlagStr] ~= nil and not NoSave then Default = ConfigData[FlagStr] end
         local Toggled = Default or false
         if not NoSave and ConfigData[FlagStr] == nil then ConfigData[FlagStr] = Toggled end
@@ -1302,7 +1362,7 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
         end
         table.insert(Lumina._Configurables, Refresh)
 
-        if Toggled then pcall(Callback, Toggled) end
+        if Toggled then pcall(Callback, Toggled) end -- Init callback
         
         local ToggleComponent = {}
         function ToggleComponent:Set(state)
@@ -1310,6 +1370,11 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
                 FireToggle(state)
             end
         end
+        function ToggleComponent:Get()
+            return Toggled
+        end
+        if not Window.Toggles then Window.Toggles = {} end
+        table.insert(Window.Toggles, ToggleComponent)
         return ToggleComponent
     end
 
@@ -1379,14 +1444,16 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
                 Dragging = true; Update(UserInputService:GetMouseLocation() - game:GetService("GuiService"):GetGuiInset())
             end
         end)
-        UserInputService.InputChanged:Connect(function(input)
+        local c1 = UserInputService.InputChanged:Connect(function(input)
             if Dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
                 Update(UserInputService:GetMouseLocation() - game:GetService("GuiService"):GetGuiInset())
             end
         end)
-        UserInputService.InputEnded:Connect(function(input)
+        local c2 = UserInputService.InputEnded:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then Dragging = false end
         end)
+        table.insert(Window.Connections, c1)
+        table.insert(Window.Connections, c2)
 
         local function Refresh()
             local cfg = ConfigData[FlagStr]
@@ -1553,6 +1620,7 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
             end)
         end)
         
+        -- Global Listener for Keybind
         local gConn = UserInputService.InputBegan:Connect(function(input, gpe)
             if not gpe and Key and input.KeyCode == Key then pcall(Callback, Key) end
         end)
@@ -1599,7 +1667,7 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
             if MultiSelect and type(ConfigData[FlagStr]) == "table" then
                 SelectedValues = ConfigData[FlagStr]
             elseif not MultiSelect then
-                
+                -- Single select initialization implicitly handled in RefreshOptions
             end
         end
         
@@ -1786,6 +1854,7 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
         
         local isCustomTheme = (ConfigData["Theme Presets"] == "Custom" or ConfigData["Theme Presets"] == nil)
 
+        -- Load custom config and update the global Custom preset cache
         if ConfigData[FlagStr] ~= nil and type(ConfigData[FlagStr]) == "table" and not NoSave then
             local ccfg = ConfigData[FlagStr]
             if ccfg.r and ccfg.g and ccfg.b then
@@ -1944,30 +2013,36 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
 
         SatValSquare.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                local conn
+                local conn, endConn
                 conn = RunService.RenderStepped:Connect(function()
-                    if not PickerActive then conn:Disconnect() return end
+                    if not PickerActive then conn:Disconnect(); if endConn then endConn:Disconnect() end return end
                     local x, y = GetInput(SatValSquare)
                     s, v = x, 1 - y
                     UpdateColor()
                 end)
-                UserInputService.InputEnded:Connect(function(ended)
-                    if ended.UserInputType == Enum.UserInputType.MouseButton1 then conn:Disconnect() end
+                endConn = UserInputService.InputEnded:Connect(function(ended)
+                    if ended.UserInputType == Enum.UserInputType.MouseButton1 then 
+                        if conn then conn:Disconnect() end
+                        if endConn then endConn:Disconnect() end
+                    end
                 end)
             end
         end)
 
         HueSlider.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                local conn
+                local conn, endConn
                 conn = RunService.RenderStepped:Connect(function()
-                    if not PickerActive then conn:Disconnect() return end
+                    if not PickerActive then conn:Disconnect(); if endConn then endConn:Disconnect() end return end
                     local _, y = GetInput(HueSlider)
                     h = y
                     UpdateColor()
                 end)
-                UserInputService.InputEnded:Connect(function(ended)
-                    if ended.UserInputType == Enum.UserInputType.MouseButton1 then conn:Disconnect() end
+                endConn = UserInputService.InputEnded:Connect(function(ended)
+                    if ended.UserInputType == Enum.UserInputType.MouseButton1 then 
+                        if conn then conn:Disconnect() end
+                        if endConn then endConn:Disconnect() end
+                    end
                 end)
             end
         end)
@@ -1980,6 +2055,11 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
             end
         end
         return ColorPickerComponent
+    end
+
+    function Tab:CreateThemeManager()
+        -- Deprecated: Theme Manager is now automatically built into the integrated Settings Tab when Window is created.
+        -- We will leave this stub.
     end
 
     return Tab
