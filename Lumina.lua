@@ -946,7 +946,7 @@ function Lumina:Destroy()
     if self.Toggles then
         for _, toggle in ipairs(self.Toggles) do
             if toggle.Get ~= nil and toggle:Get() == true then
-                pcall(function() toggle:Set(false) end)
+                pcall(function() toggle:Set(false, true) end)
             end
         end
     end
@@ -1338,11 +1338,11 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
         end
         ApplyBounce(Clicker, ToggleFrame)
 
-        local function FireToggle(state)
+        local function FireToggle(state, skipSave)
             Toggled = state
             CreateTween(SwitchBg, {BackgroundColor3 = Toggled and Theme.Accent or Color3.fromRGB(50, 50, 55)}, 0.4)
             CreateTween(Dot, {Position = Toggled and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)}, 0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-            if not NoSave then ConfigData[FlagStr] = Toggled; SaveConfig() end
+            if not NoSave and not skipSave then ConfigData[FlagStr] = Toggled; SaveConfig() end
             pcall(Callback, Toggled)
         end
 
@@ -1365,9 +1365,9 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
         if Toggled then pcall(Callback, Toggled) end -- Init callback
         
         local ToggleComponent = {}
-        function ToggleComponent:Set(state)
+        function ToggleComponent:Set(state, skipSave)
             if state ~= Toggled then
-                FireToggle(state)
+                FireToggle(state, skipSave)
             end
         end
         function ToggleComponent:Get()
