@@ -349,9 +349,14 @@ function Lumina.CreateWindow(Config)
     self.UseCanvasGroup = Config.UseCanvasGroup
     if self.UseCanvasGroup == nil then self.UseCanvasGroup = true end -- Default to true for premium fade
 
+    local minWidth = math.min(450, MaxSize.X)
+    local minHeight = math.min(300, MaxSize.Y)
+    local initWidth = math.clamp(Config.Size and Config.Size.X or MaxSize.X, minWidth, MaxSize.X)
+    local initHeight = math.clamp(Config.Size and Config.Size.Y or MaxSize.Y, minHeight, MaxSize.Y)
+
     self.Main = Instance.new(self.UseCanvasGroup and "CanvasGroup" or "Frame")
-    self.Main.Size = UDim2.new(0, 650, 0, 450)
-    self.Main.Position = UDim2.new(0.5, -325, 0.5, -225)
+    self.Main.Size = UDim2.new(0, initWidth, 0, initHeight)
+    self.Main.Position = UDim2.new(0.5, -initWidth/2, 0.5, -initHeight/2)
     
     local targetBgTrans = 0.05 -- slight transparency to make CanvasGroup shine
     
@@ -749,7 +754,8 @@ function Lumina.CreateWindow(Config)
             self.ToggleKey = key
         end, false, nil, "Lumina_ToggleKey")
         
-        ThemeSec:CreateToggle("Gradient Line Effect", Lumina.GradientEnabled, function(toggled)
+        ThemeSec:CreateToggle("Gradient Line Effect", Lumina.GradientEnabled, function(toggled, skipSave)
+            if skipSave then return end
             Lumina.GradientEnabled = toggled
             ConfigData["Lumina_GradientEffect"] = toggled
             
@@ -779,6 +785,7 @@ function Lumina.CreateWindow(Config)
                 if writefile then pcall(function() writefile(FolderPath .. "/" .. GameFolderStr .. "/Autoload.txt", SelectedConfig) end) end
             end
         end, false, true)
+        ConfigDropdown:Set(SelectedConfig)
         
         ConfigSec:CreateInput("New Config Name", "", function(val)
             if val and val ~= "" then
@@ -804,7 +811,8 @@ function Lumina.CreateWindow(Config)
             Lumina:Notify({Title = "Configuration", Content = "Saved " .. SelectedConfig })
         end)
 
-        ConfigSec:CreateToggle("Auto-Save Configuration", Lumina.AutoSave or false, function(toggled)
+        ConfigSec:CreateToggle("Auto-Save Configuration", Lumina.AutoSave or false, function(toggled, skipSave)
+            if skipSave then return end
             Lumina.AutoSave = toggled
             ConfigData["Lumina_AutoSave"] = toggled
             SaveConfig(SelectedConfig, true)
@@ -1061,8 +1069,8 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
                 isMovingDown = CurrentTab.Btn.LayoutOrder > Window.ActiveTab.Btn.LayoutOrder
             end
             
-            local outOffset = isMovingDown and -40 or 40
-            local inOffset = isMovingDown and 40 or -40
+            local outOffset = isMovingDown and -1 or 1
+            local inOffset = isMovingDown and 1 or -1
             
             local activeTab = Window.ActiveTab
             Window.ActiveTab = CurrentTab
@@ -1075,21 +1083,17 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
                     Register(t.Btn, "SecondaryText", "TextColor3")
                     
                     local frame = t.Frame
-                    CreateTween(frame, {Position = UDim2.new(0, 0, 0, outOffset)}, 0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
-                    task.delay(0.15, function()
+                    CreateTween(frame, {Position = UDim2.new(0, 0, outOffset, 0)}, 0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+                    task.delay(0.4, function()
                         if Window.ActiveTab ~= t then frame.Visible = false end
                     end)
                 end
             end
             
-            if activeTab then
-                task.wait(0.15)
-            end
-            
             if Window.ActiveTab == CurrentTab then
                 CurrentTab.Frame.Visible = true
-                CurrentTab.Frame.Position = UDim2.new(0, 0, 0, inOffset)
-                CreateTween(CurrentTab.Frame, {Position = UDim2.new(0, 0, 0, 0)}, 0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+                CurrentTab.Frame.Position = UDim2.new(0, 0, inOffset, 0)
+                CreateTween(CurrentTab.Frame, {Position = UDim2.new(0, 0, 0, 0)}, 0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
                 
                 CreateTween(CurrentTab.Btn, {BackgroundTransparency = 0.9}, 0.3)
                 if CurrentTab.Icon then Register(CurrentTab.Icon, "Accent", "ImageColor3") end
