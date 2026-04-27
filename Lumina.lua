@@ -775,6 +775,9 @@ function Lumina.CreateWindow(Config)
         local ConfigDropdown = ConfigSec:CreateDropdown("Selected Config", GetConfigs(), function(val)
             SelectedConfig = val
             Lumina.CurrentConfig = val
+            if AutoLoadEnabled then
+                if writefile then pcall(function() writefile(FolderPath .. "/" .. GameFolderStr .. "/Autoload.txt", SelectedConfig) end) end
+            end
         end, false, true)
         
         ConfigSec:CreateInput("New Config Name", "", function(val)
@@ -784,6 +787,9 @@ function Lumina.CreateWindow(Config)
                 SaveConfig(SelectedConfig, true)
                 ConfigDropdown:RefreshOptions(GetConfigs())
                 ConfigDropdown:Set(SelectedConfig)
+                if AutoLoadEnabled then
+                    if writefile then pcall(function() writefile(FolderPath .. "/" .. GameFolderStr .. "/Autoload.txt", SelectedConfig) end) end
+                end
             end
         end, true)
 
@@ -804,7 +810,9 @@ function Lumina.CreateWindow(Config)
             SaveConfig(SelectedConfig, true)
         end, true, "Automatically saves configuration changes")
 
-        ConfigSec:CreateToggle("Auto-Load Selection", AutoLoadEnabled, function(toggled)
+        ConfigSec:CreateToggle("Auto-Load Selection", AutoLoadEnabled, function(toggled, skipSave)
+            if skipSave then return end
+            AutoLoadEnabled = toggled
             if toggled then
                 if writefile then pcall(function() writefile(FolderPath .. "/" .. GameFolderStr .. "/Autoload.txt", SelectedConfig) end) end
             else
@@ -1343,7 +1351,7 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
             CreateTween(SwitchBg, {BackgroundColor3 = Toggled and Theme.Accent or Color3.fromRGB(50, 50, 55)}, 0.4)
             CreateTween(Dot, {Position = Toggled and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)}, 0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
             if not NoSave and not skipSave then ConfigData[FlagStr] = Toggled; SaveConfig() end
-            pcall(Callback, Toggled)
+            pcall(Callback, Toggled, skipSave)
         end
 
         Clicker.MouseButton1Click:Connect(function() FireToggle(not Toggled) end)
