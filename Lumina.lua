@@ -1,6 +1,3 @@
--- [[ LUMINA UI LIBRARY - THE DEFINITIVE EXPERIENCE ]]
--- [Features: Glassmorphism Blur, Advanced Easing, Dynamic Shadows, Auto-Config, Sections]
-
 local Lumina = {}
 Lumina.__index = Lumina
 Lumina.Windows = {}
@@ -227,7 +224,7 @@ local function UpdateTheme(category, color)
                 i = i + 1
                 batchCounter = batchCounter + 1
                 if batchCounter % 50 == 0 then
-                    task.wait() -- Yield to prevent freezing on huge updates
+                    task.wait()
                 end
             else
                 table.remove(ThemeRegistry[category], i)
@@ -235,13 +232,11 @@ local function UpdateTheme(category, color)
         end
     end
     
-    -- Update Gradients!
     if category == "GradientEdge" or category == "Accent" or category == "Stroke" then
         UpdateGradients()
     end
 end
 
--- [[ ADVANCED EASING UTILITY ]]
 local function CreateTween(instance, properties, duration, style, direction)
     local tInfo = TweenInfo.new(duration or 0.3, style or Enum.EasingStyle.Quart, direction or Enum.EasingDirection.Out)
     local tween = TweenService:Create(instance, tInfo, properties)
@@ -347,7 +342,7 @@ function Lumina.CreateWindow(Config)
     self.Gui.Parent = gethui()
     
     self.UseCanvasGroup = Config.UseCanvasGroup
-    if self.UseCanvasGroup == nil then self.UseCanvasGroup = true end -- Default to true for premium fade
+    if self.UseCanvasGroup == nil then self.UseCanvasGroup = true end 
 
     local minWidth = math.min(450, MaxSize.X)
     local minHeight = math.min(300, MaxSize.Y)
@@ -358,7 +353,7 @@ function Lumina.CreateWindow(Config)
     self.Main.Size = UDim2.new(0, initWidth, 0, initHeight)
     self.Main.Position = UDim2.new(0.5, -initWidth/2, 0.5, -initHeight/2)
     
-    local targetBgTrans = 0.05 -- slight transparency to make CanvasGroup shine
+    local targetBgTrans = 0.05 
     
     if self.UseCanvasGroup then
         self.Main.GroupTransparency = 1
@@ -489,7 +484,6 @@ function Lumina.CreateWindow(Config)
     MakeDraggable(self.Main, Topbar, self)
     MakeResizable(self.Main, ResizeHandle, Vector2.new(450, 300), MaxSize, self)
 
-    -- Floating Minimized Toggle
     self.MobileToggle = Instance.new("TextButton")
     self.MobileToggle.Size = UDim2.new(0, 46, 0, 46)
     self.MobileToggle.Position = UDim2.new(0.5, -23, 0, 15)
@@ -623,7 +617,6 @@ function Lumina.CreateWindow(Config)
     end)
     table.insert(self.Connections, toggleConn)
 
-    -- Static container for Notifications
     self.ToastContainer = Instance.new("Frame")
     self.ToastContainer.Size = UDim2.new(0, 300, 1, -40)
     self.ToastContainer.Position = UDim2.new(1, -320, 0, 20)
@@ -634,7 +627,6 @@ function Lumina.CreateWindow(Config)
     ToastLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
     ToastLayout.Padding = UDim.new(0, 10)
 
-    -- [[ LOADING SCREEN INJECTION ]]
     local Splash = Instance.new("Frame", self.Gui)
     Splash.Size = UDim2.new(0, 260, 0, 120)
     Splash.Position = UDim2.new(0.5, -130, 0.5, -60)
@@ -668,7 +660,6 @@ function Lumina.CreateWindow(Config)
     SplashBarFill.Size = UDim2.new(0, 0, 1, 0)
     Register(SplashBarFill, "Accent", "BackgroundColor3")
 
-    -- Initially hide main globally by moving it offscreen
     local startPos = self.Main.Position
     self.Main.Position = UDim2.new(2, 0, 2, 0)
     self.Main.Visible = true
@@ -676,7 +667,6 @@ function Lumina.CreateWindow(Config)
 
     task.spawn(function()
         task.wait(0.2)
-        -- Animate bar
         CreateTween(SplashBarFill, {Size = UDim2.new(0.4, 0, 1, 0)}, 0.4, Enum.EasingStyle.Quart)
         task.wait(0.3)
         CreateTween(SplashBarFill, {Size = UDim2.new(0.8, 0, 1, 0)}, 0.6, Enum.EasingStyle.Quart)
@@ -684,7 +674,6 @@ function Lumina.CreateWindow(Config)
         CreateTween(SplashBarFill, {Size = UDim2.new(1, 0, 1, 0)}, 0.2, Enum.EasingStyle.Quart)
         task.wait(0.25)
         
-        -- Explode Splash away
         CreateTween(Splash, {Size = UDim2.new(0, 300, 0, 140), Position = UDim2.new(0.5, -150, 0.5, -70), BackgroundTransparency = 1}, 0.4, Enum.EasingStyle.Back, Enum.EasingDirection.In)
         for _, obj in pairs(Splash:GetDescendants()) do
             if obj:IsA("TextLabel") then CreateTween(obj, {TextTransparency = 1}, 0.3)
@@ -695,12 +684,10 @@ function Lumina.CreateWindow(Config)
         
         task.wait(0.35)
         
-        -- Hide inactive tabs that were visible just to compute layout sizes
         for _, t in pairs(self.Tabs) do
             if self.ActiveTab ~= t then t.Frame.Visible = false end
         end
 
-        -- Open Main UI beautifully
         local finalPos = startPos
         local Scale = self.Main:FindFirstChild("WindowScale")
         if Scale then Scale.Scale = GetTargetScale() * 0.8 end
@@ -730,7 +717,6 @@ function Lumina.CreateWindow(Config)
         ApplyIcon(SettingsOpenBtn, "lucide-settings")
         Register(SettingsOpenBtn, "SecondaryText", "ImageColor3")
         
-        -- Hover effects
         SettingsOpenBtn.MouseEnter:Connect(function() CreateTween(SettingsOpenBtn, {ImageTransparency = 0.5}, 0.2) end)
         SettingsOpenBtn.MouseLeave:Connect(function() CreateTween(SettingsOpenBtn, {ImageTransparency = 0}, 0.2) end)
         
@@ -926,7 +912,6 @@ function Lumina:Notify(Options)
     ContentLabel.TextTransparency = 1
     Register(ContentLabel, "SecondaryText", "TextColor3")
     
-    -- Animation IN
     CreateTween(Toast, {BackgroundTransparency = 0.05}, 0.3)
     CreateTween(Stroke, {Transparency = 0.5}, 0.3)
     CreateTween(Icon, {ImageTransparency = 0}, 0.3)
@@ -934,7 +919,6 @@ function Lumina:Notify(Options)
     CreateTween(ContentLabel, {TextTransparency = 0}, 0.3)
     CreateTween(ToastScale, {Scale = 1}, 0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
     
-    -- Timer Anim
     CreateTween(ProgressFill, {Size = UDim2.new(0, 0, 1, 0)}, Duration, Enum.EasingStyle.Linear)
     
     task.delay(Duration, function()
@@ -975,7 +959,6 @@ function Lumina:Destroy()
     if self.Gui then self.Gui:Destroy() end
 end
 
-    -- [[ COMPONENT BUILDER ]]
 local function RenderComponentBase(TargetParent, Height, InfoText, TitleText)
     local Frame = Instance.new("Frame")
     Frame.Size = UDim2.new(1, -14, 0, Height)
@@ -1029,7 +1012,7 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
         local TabIcon = Instance.new("ImageLabel", TabBtn)
         TabIcon.Name = "Icon"
         TabIcon.Size = UDim2.new(0, 16, 0, 16)
-        TabIcon.Position = UDim2.new(0, -24, 0.5, -8) -- Anchored absolutely away from padding
+        TabIcon.Position = UDim2.new(0, -24, 0.5, -8)
         TabIcon.BackgroundTransparency = 1
         ApplyIcon(TabIcon, IconName)
         if not IconName then TabIcon.Visible = false end
@@ -1041,7 +1024,7 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
     local TabFrame = Instance.new("ScrollingFrame")
     TabFrame.Size = UDim2.new(1, 0, 1, 0)
     TabFrame.BackgroundTransparency = 1
-    TabFrame.Visible = true -- Compute layouts automatically!
+    TabFrame.Visible = true 
     TabFrame.ScrollBarThickness = 2
     TabFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
     TabFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
@@ -1122,7 +1105,6 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
 
     ApplyBounce(TabBtn)
 
-    -- [[ TAB METHODS (Including Sections and Labels) ]]
     function Tab:CreateLabel(Text, IconName)
         Tab.LayoutOrder = Tab.LayoutOrder + 1
         local ParentFrame = self.TargetParent or TabFrame
@@ -1258,12 +1240,10 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
             end)
         end
         
-        -- Initial evaluation 
         task.defer(function()
             SecFrame.Size = UDim2.new(1, -14, 0, SecLayout.AbsoluteContentSize.Y + 46)
         end)
 
-        -- Mirror tab methods to append to the Section's container instead
         local ProxyTab = setmetatable({}, {__index = Tab})
         ProxyTab.TargetParent = SecContainer
         return ProxyTab
@@ -1307,7 +1287,6 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
         Tab.LayoutOrder = Tab.LayoutOrder + 1
         local ParentFrame = self.TargetParent or TabFrame
         
-        -- Load Config
         if ConfigData[FlagStr] ~= nil and not NoSave then Default = ConfigData[FlagStr] end
         local Toggled = Default or false
         if not NoSave and ConfigData[FlagStr] == nil then ConfigData[FlagStr] = Toggled end
@@ -1374,7 +1353,7 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
         end
         table.insert(Lumina._Configurables, Refresh)
 
-        if Toggled then pcall(Callback, Toggled) end -- Init callback
+        if Toggled then pcall(Callback, Toggled) end 
         
         local ToggleComponent = {}
         function ToggleComponent:Set(state, skipSave)
@@ -1632,7 +1611,6 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
             end)
         end)
         
-        -- Global Listener for Keybind
         local gConn = UserInputService.InputBegan:Connect(function(input, gpe)
             if not gpe and Key and input.KeyCode == Key then pcall(Callback, Key) end
         end)
@@ -1679,7 +1657,6 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
             if MultiSelect and type(ConfigData[FlagStr]) == "table" then
                 SelectedValues = ConfigData[FlagStr]
             elseif not MultiSelect then
-                -- Single select initialization implicitly handled in RefreshOptions
             end
         end
         
@@ -1866,7 +1843,6 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
         
         local isCustomTheme = (ConfigData["Theme Presets"] == "Custom" or ConfigData["Theme Presets"] == nil)
 
-        -- Load custom config and update the global Custom preset cache
         if ConfigData[FlagStr] ~= nil and type(ConfigData[FlagStr]) == "table" and not NoSave then
             local ccfg = ConfigData[FlagStr]
             if ccfg.r and ccfg.g and ccfg.b then
@@ -2067,11 +2043,6 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
             end
         end
         return ColorPickerComponent
-    end
-
-    function Tab:CreateThemeManager()
-        -- Deprecated: Theme Manager is now automatically built into the integrated Settings Tab when Window is created.
-        -- We will leave this stub.
     end
 
     return Tab
