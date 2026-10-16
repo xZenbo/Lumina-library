@@ -30,8 +30,8 @@ local function ApplyIcon(UIElement, Name)
     
     local cleanName = Name:lower():gsub("^lucide%-", "")
     
-    if Lucide and _Lucide.GetAsset then
-        local success, asset = pcall(function() return _Lucide.GetAsset(cleanName) end)
+    if Lucide and Lucide.GetAsset then
+        local success, asset = pcall(function() return Lucide.GetAsset(cleanName) end)
         if success and asset then
             UIElement.Image = asset.Url
             UIElement.ImageRectSize = asset.ImageRectSize
@@ -51,6 +51,8 @@ local CoreGui = game:GetService("CoreGui")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
+local ContextActionService = game:GetService("ContextActionService")
+local GuiService = game:GetService("GuiService")
 
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
@@ -89,7 +91,7 @@ if makefolder then
 end
 
 local function SaveConfig(name, force)
-    if not _Lumina.AutoSave and not force then return end
+    if not Lumina.AutoSave and not force then return end
     name = type(name) == "string" and name or Lumina.CurrentConfig or "Default"
     local normalized = name:gsub("\\", "/")
     local safeName = normalized:match("([^/]+)$") or normalized
@@ -177,7 +179,7 @@ local function Register(obj, category, prop)
 end
 
 local function UpdateGradients()
-    local gradCol = Theme.Accent
+    local gradCol = Theme.GradientEdge or Theme.Accent
     local strokeCol = Theme.Stroke
     local seq = ColorSequence.new({
         ColorSequenceKeypoint.new(0, strokeCol),
@@ -279,16 +281,22 @@ local function MakeDraggable(Frame, Handle, Window)
     Handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             Dragging = true; DragStart = input.Position; StartPos = Frame.Position
+            Frame:SetAttribute("LuminaDragged", false)
+            if type(Window) == "table" then Window.Interacting = true end
         end
     end)
     local c1 = UserInputService.InputChanged:Connect(function(input)
         if Dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local Delta = input.Position - DragStart
+            if Delta.Magnitude > 4 then Frame:SetAttribute("LuminaDragged", true) end
             Frame.Position = UDim2.new(StartPos.X.Scale, StartPos.X.Offset + Delta.X, StartPos.Y.Scale, StartPos.Y.Offset + Delta.Y)
         end
     end)
     local c2 = UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then Dragging = false end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            Dragging = false
+            if type(Window) == "table" then Window.Interacting = false end
+        end
     end)
     if Window and type(Window) == "table" and Window.Connections then
         table.insert(Window.Connections, c1)
@@ -301,6 +309,7 @@ local function MakeResizable(Frame, Handle, MinSize, MaxSize, Window)
     Handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             Dragging = true; DragStart = input.Position; StartSize = Frame.AbsoluteSize
+            if type(Window) == "table" then Window.Interacting = true end
         end
     end)
     local c1 = UserInputService.InputChanged:Connect(function(input)
@@ -312,7 +321,10 @@ local function MakeResizable(Frame, Handle, MinSize, MaxSize, Window)
         end
     end)
     local c2 = UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then Dragging = false end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            Dragging = false
+            if type(Window) == "table" then Window.Interacting = false end
+        end
     end)
     if Window and type(Window) == "table" and Window.Connections then
         table.insert(Window.Connections, c1)
@@ -521,11 +533,14 @@ function Lumina.CreateWindow(Config)
     Register(MobileToggleIcon, "Accent", "ImageColor3")
     Register(MobileToggleStroke, "Stroke", "Color")
 
+    -- Hover effects must not fight the open/close fade (they used to re-show the gradient stroke mid-morph)
     self.MobileToggle.MouseEnter:Connect(function()
+        if self._Toggling or not self.MobileToggle.Visible then return end
         CreateTween(MobileToggleScale, {Scale = 1.05}, 0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
         CreateTween(MobileToggleStroke, {Transparency = 0}, 0.2)
     end)
     self.MobileToggle.MouseLeave:Connect(function()
+        if self._Toggling or not self.MobileToggle.Visible then return end
         CreateTween(MobileToggleScale, {Scale = 1}, 0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
         CreateTween(MobileToggleStroke, {Transparency = 0.4}, 0.2)
     end)
@@ -539,66 +554,291 @@ function Lumina.CreateWindow(Config)
     MakeDraggable(self.MobileToggle, self.MobileToggle, self)
 
     self.MobileToggle.MouseButton1Click:Connect(function()
+        -- A drag release should not count as a click
+        if self.MobileToggle:GetAttribute("LuminaDragged") then return end
         self:SetVisible(true)
     end)
-    
+
+    -- [[ GAME INPUT BLOCKING ]]
+    -- Active stops GUI clicks from reaching the world (tools, default camera); the
+    -- ContextActionService sink stops game scripts bound through CAS while the pointer is over Lumina.
+    self.Main.Active = true
+    self.MobileToggle.Active = true
+
+    local SinkName = "LuminaInputSink_" .. HttpService:GenerateGUID(false)
+    local Sinking = false
+    local TouchPositions = {}
+
+    local function SinkHandler()
+        return Enum.ContextActionResult.Sink
+    end
+
+    local function SetSinking(state)
+        if state == Sinking then return end
+        Sinking = state
+        if state then
+            pcall(function()
+                ContextActionService:BindActionAtPriority(SinkName, SinkHandler, false, 3000,
+                    Enum.UserInputType.MouseButton1, Enum.UserInputType.MouseButton2,
+                    Enum.UserInputType.MouseButton3, Enum.UserInputType.MouseWheel,
+                    Enum.UserInputType.Touch)
+            end)
+        else
+            pcall(function() ContextActionService:UnbindAction(SinkName) end)
+        end
+    end
+
+    local function PointInside(obj, pos)
+        if not obj.Visible then return false end
+        local p, s = obj.AbsolutePosition, obj.AbsoluteSize
+        return pos.X >= p.X and pos.X <= p.X + s.X and pos.Y >= p.Y and pos.Y <= p.Y + s.Y
+    end
+
+    local function PointerOverUI(pos)
+        return PointInside(self.Main, pos) or PointInside(self.MobileToggle, pos)
+    end
+
+    local inputConns = {
+        UserInputService.TouchStarted:Connect(function(t) TouchPositions[t] = Vector2.new(t.Position.X, t.Position.Y) - GuiService:GetGuiInset() end),
+        UserInputService.TouchMoved:Connect(function(t) TouchPositions[t] = Vector2.new(t.Position.X, t.Position.Y) - GuiService:GetGuiInset() end),
+        UserInputService.TouchEnded:Connect(function(t) TouchPositions[t] = nil end),
+        RunService.RenderStepped:Connect(function()
+            local over = self.Interacting == true
+            if not over then
+                over = PointerOverUI(UserInputService:GetMouseLocation() - GuiService:GetGuiInset())
+            end
+            if not over then
+                for _, pos in pairs(TouchPositions) do
+                    if PointerOverUI(pos) then over = true break end
+                end
+            end
+            SetSinking(over)
+        end),
+    }
+    for _, c in ipairs(inputConns) do table.insert(self.Connections, c) end
+    self._UnbindSink = function() SetSinking(false) end
+
     local function GetTargetScale()
         local vp = workspace.CurrentCamera.ViewportSize
         return math.clamp(math.min(vp.X / 1024, vp.Y / 768), 0.5, 1)
     end
 
     local activePos = self.Main.Position
+    local activeSize = self.Main.Size
+    local TOGGLE_SIZE = 46
+    local TOGGLE_RADIUS = 14
+
+    -- Center of the floating button in the same coordinate space as Main's Position
+    local function GetToggleCenter()
+        local gs = self.Gui.AbsoluteSize
+        local p = self.MobileToggle.Position
+        return Vector2.new(
+            p.X.Scale * gs.X + p.X.Offset + TOGGLE_SIZE / 2,
+            p.Y.Scale * gs.Y + p.Y.Offset + TOGGLE_SIZE / 2
+        )
+    end
+
+    -- Which part of the window stays pinned to the button on each axis:
+    -- 0 = leading edge (left/top), 1 = trailing edge (right/bottom), 0.5 = center. The button sits on the
+    -- window's nearest corner (or its middle on an axis when the window is near the screen's middle),
+    -- and the window grows out of / shrinks into that same point
+    local function GetAnchorFraction(pos, size)
+        local f = size > 0 and pos / size or 0.5
+        if f < 0.35 then return 0 elseif f > 0.65 then return 1 end
+        return 0.5
+    end
+
+    -- Remembers where the window sat when it was closed so reopening an untouched button restores it exactly
+    local closedButtonPos, closedWindowPos
+    -- Cover layer: looks like the floating button (same fill + icon). It hides the window's
+    -- contents (title, tabs, etc.) while the window is small so they never flash or squish.
+    local Cover = Instance.new("Frame")
+    Cover.Name = "MorphCover"
+    Cover.Size = UDim2.new(1, 0, 1, 0)
+    Cover.BorderSizePixel = 0
+    Cover.BackgroundTransparency = 1
+    Cover.ZIndex = 100
+    Cover.Active = false
+    Cover.Visible = false
+    Cover.Parent = self.Main
+    Register(Cover, "MainSide", "BackgroundColor3")
+    local CoverCorner = Instance.new("UICorner", Cover)
+    CoverCorner.CornerRadius = UDim.new(0, 12)
+    local CoverIcon = Instance.new("ImageLabel", Cover)
+    CoverIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+    CoverIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+    CoverIcon.BackgroundTransparency = 1
+    CoverIcon.ImageTransparency = 1
+    CoverIcon.ZIndex = 101
+    ApplyIcon(CoverIcon, Config.Icon or "lucide-terminal")
+    Register(CoverIcon, "Accent", "ImageColor3")
+
+    -- Contents can overflow the small window (long titles are not clipped), so actually hide them
+    local function SetContentVisible(visible)
+        Topbar.Visible = visible
+        self.Sidebar.Visible = visible
+        self.Container.Visible = visible
+        ResizeHandle.Visible = visible
+    end
+
+    local function TweenCover(visible, duration, delay, style)
+        local info = TweenInfo.new(duration, style or Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, false, delay or 0)
+        TweenService:Create(Cover, info, {BackgroundTransparency = visible and 0 or 1}):Play()
+        TweenService:Create(CoverIcon, info, {ImageTransparency = visible and 0 or 1}):Play()
+    end
+
+    -- Show/hide the button by fading it so it can cross-fade with the window morph
+    local function TweenToggle(visible, duration, delay)
+        local info = TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, false, delay or 0)
+        local bg = visible and 0.1 or 1
+        local alpha = visible and 0 or 1
+        local strokeT = visible and 0.2 or 1
+        TweenService:Create(self.MobileToggle, info, {BackgroundTransparency = bg}):Play()
+        TweenService:Create(MobileToggleIcon, info, {ImageTransparency = alpha}):Play()
+        TweenService:Create(MobileToggleStroke, info, {Transparency = strokeT}):Play()
+        TweenService:Create(MobileToggleScale, TweenInfo.new(duration, Enum.EasingStyle.Back, Enum.EasingDirection.Out, 0, false, delay or 0), {Scale = visible and 1 or 0.8}):Play()
+    end
 
     function self:SetVisible(state)
-        if self._Toggling then return end
+        if self._Toggling then self._PendingVisible = state return end
         self._Toggling = true
         self.Visible = state
-        
+
         local Main = self.Main
         local Scale = Main:FindFirstChild("WindowScale") or Instance.new("UIScale", Main)
         Scale.Name = "WindowScale"
 
-        local duration = 0.4
-        local style = Enum.EasingStyle.Quint
-        local dir = Enum.EasingDirection.Out
-        
         local targetScale = GetTargetScale()
+        local collapsedSize = TOGGLE_SIZE / targetScale -- displayed size ends up exactly the button size
+        local collapsedSizeUDim = UDim2.new(0, collapsedSize, 0, collapsedSize)
+        local gs = self.Gui.AbsoluteSize
+        local half = Vector2.new(TOGGLE_SIZE / 2, TOGGLE_SIZE / 2)
+        local collapsedPosUDim -- set per direction below: the button and the window share one center
+        local collapsedRadius = UDim.new(0, TOGGLE_RADIUS / targetScale)
+        local openRadius = UDim.new(0, 12)
+
+        local clipBefore = Main.ClipsDescendants
+        Main.ClipsDescendants = true
+        Scale.Scale = targetScale
 
         if state then
+            -- Grow out of the floating button, wherever it currently is
+            -- The window expands outward from the button's nearest screen corner (e.g. a button in the
+            -- top-left grows down and to the right; one in the bottom-right grows up and to the left)
+            local center = GetToggleCenter()
+            local buttonTL = center - half
+            local dispSize = Vector2.new(activeSize.X.Scale * gs.X + activeSize.X.Offset, activeSize.Y.Scale * gs.Y + activeSize.Y.Offset) * targetScale
+            local ax, ay = GetAnchorFraction(center.X, gs.X), GetAnchorFraction(center.Y, gs.Y)
+            local topLeft = Vector2.new(
+                buttonTL.X + (TOGGLE_SIZE - dispSize.X) * ax,
+                buttonTL.Y + (TOGGLE_SIZE - dispSize.Y) * ay
+            )
+            topLeft = Vector2.new(
+                math.clamp(topLeft.X, 0, math.max(0, gs.X - dispSize.X)),
+                math.clamp(topLeft.Y, 0, math.max(0, gs.Y - dispSize.Y))
+            )
+            if closedButtonPos and (buttonTL - closedButtonPos).Magnitude < 1.5 then
+                -- Button wasn't moved since closing: reopen exactly where the window was
+                topLeft = closedWindowPos
+            end
+            activePos = UDim2.new(0, topLeft.X, 0, topLeft.Y)
+            local collapsedPos = center - half
+            collapsedPosUDim = UDim2.new(0, collapsedPos.X, 0, collapsedPos.Y)
+
+            -- The button hides instantly; the cover below looks identical so there is no gradient flash
             self.MobileToggle.Visible = false
-            Main.Visible = true
+            TweenToggle(false, 0)
+
+            Main.Size = collapsedSizeUDim
+            Main.Position = collapsedPosUDim
+            MainCorner.CornerRadius = collapsedRadius
             if self.UseCanvasGroup then Main.GroupTransparency = 1 end
-            Scale.Scale = targetScale * 0.8
-            
-            local targetPos = activePos
-            Main.Position = UDim2.new(targetPos.X.Scale, targetPos.X.Offset, targetPos.Y.Scale, targetPos.Y.Offset + 20)
 
-            local tweenProps = {Position = targetPos}
-            if self.UseCanvasGroup then tweenProps.GroupTransparency = 0 end
+            -- Start fully covered so the window looks identical to the button
+            Cover.Visible = true
+            Cover.BackgroundTransparency = 0
+            CoverIcon.ImageTransparency = 0
+            CoverIcon.Size = UDim2.new(0, 24 / targetScale, 0, 24 / targetScale)
+            CoverCorner.CornerRadius = collapsedRadius
+            Main.Visible = true
+            SetContentVisible(false)
+            task.delay(0.26, function() SetContentVisible(true) end)
 
-            CreateTween(Main, tweenProps, duration, style, dir)
-            
-            local scaleTween = CreateTween(Scale, {Scale = targetScale}, duration, style, dir)
-            scaleTween.Completed:Wait()
+            local morph = TweenInfo.new(0.6, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out)
+            local sizeTween = TweenService:Create(Main, morph, {Size = activeSize, Position = activePos})
+            TweenService:Create(MainCorner, morph, {CornerRadius = openRadius}):Play()
+            TweenService:Create(CoverCorner, morph, {CornerRadius = openRadius}):Play()
+            if self.UseCanvasGroup then
+                TweenService:Create(Main, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {GroupTransparency = 0}):Play()
+            end
+            -- Reveal the contents only once the window is mostly grown
+            TweenCover(false, 0.28, 0.22)
+            sizeTween:Play()
+            sizeTween.Completed:Wait()
+            task.wait(0.05)
+
+            Cover.Visible = false
+            Main.ClipsDescendants = clipBefore
         else
             activePos = Main.Position
-            
-            local tweenProps = {Position = UDim2.new(activePos.X.Scale, activePos.X.Offset, activePos.Y.Scale, activePos.Y.Offset + 20)}
-            if self.UseCanvasGroup then tweenProps.GroupTransparency = 1 end
+            activeSize = Main.Size
 
-            CreateTween(Main, tweenProps, duration * 0.7, style, Enum.EasingDirection.In)
-            
-            local scaleTween = CreateTween(Scale, {Scale = targetScale * 0.8}, duration * 0.7, style, Enum.EasingDirection.In)
-            scaleTween.Completed:Wait()
-            
+            -- The button never moves on its own: the window shrinks into wherever the button already is
+            local topLeft = Vector2.new(activePos.X.Scale * gs.X + activePos.X.Offset, activePos.Y.Scale * gs.Y + activePos.Y.Offset)
+            local collapsedPos = GetToggleCenter() - half
+            collapsedPosUDim = UDim2.new(0, collapsedPos.X, 0, collapsedPos.Y)
+            closedButtonPos = collapsedPos
+            closedWindowPos = topLeft
+
+            -- Shrink into the floating button
+            self.MobileToggle.Visible = true
+            local toggleStartAlpha = 1
+            self.MobileToggle.BackgroundTransparency = toggleStartAlpha
+            MobileToggleIcon.ImageTransparency = 1
+            MobileToggleStroke.Transparency = 1
+            MobileToggleScale.Scale = 0.8
+
+            -- Cover the contents right away, before the window gets small enough to squish them
+            Cover.Visible = true
+            Cover.BackgroundTransparency = 1
+            CoverIcon.ImageTransparency = 1
+            CoverIcon.Size = UDim2.new(0, 24 / targetScale, 0, 24 / targetScale)
+            CoverCorner.CornerRadius = openRadius
+            TweenCover(true, 0.16, 0)
+            task.delay(0.17, function() SetContentVisible(false) end)
+
+            local morph = TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut)
+            local sizeTween = TweenService:Create(Main, morph, {Size = collapsedSizeUDim, Position = collapsedPosUDim})
+            TweenService:Create(MainCorner, morph, {CornerRadius = collapsedRadius}):Play()
+            TweenService:Create(CoverCorner, morph, {CornerRadius = collapsedRadius}):Play()
+            if self.UseCanvasGroup then
+                TweenService:Create(Main, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.In, 0, false, 0.38), {GroupTransparency = 1}):Play()
+            end
+            TweenToggle(true, 0.14, 0.38)
+            sizeTween:Play()
+            sizeTween.Completed:Wait()
+
+            Main.ClipsDescendants = clipBefore
             if not self.Visible then
                 Main.Visible = false
+                Cover.Visible = false
+                SetContentVisible(true)
+                Main.Size = activeSize
                 Main.Position = activePos
-                self.MobileToggle.Visible = true
+                MainCorner.CornerRadius = openRadius
             end
         end
-        
+
         self._Toggling = false
+
+        -- Honour a toggle request that was made while animating
+        if self._PendingVisible ~= nil and self._PendingVisible ~= self.Visible then
+            local pending = self._PendingVisible
+            self._PendingVisible = nil
+            task.spawn(function() self:SetVisible(pending) end)
+        else
+            self._PendingVisible = nil
+        end
     end
 
     local viewportConn = workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
@@ -972,6 +1212,7 @@ function Lumina:Destroy()
             if typeof(conn) == "RBXScriptConnection" then conn:Disconnect() end 
         end
     end
+    if self._UnbindSink then pcall(self._UnbindSink) end
     if self.Gui then self.Gui:Destroy() end
 end
 
