@@ -1,6 +1,3 @@
--- [[ LUMINA UI LIBRARY - THE DEFINITIVE EXPERIENCE ]]
--- [Features: Glassmorphism Blur, Advanced Easing, Dynamic Shadows, Auto-Config, Sections]
-
 local Lumina = {}
 Lumina.__index = Lumina
 Lumina.Windows = {}
@@ -237,13 +234,11 @@ local function UpdateTheme(category, color)
         end
     end
     
-    -- Update Gradients!
     if category == "GradientEdge" or category == "Accent" or category == "Stroke" then
         UpdateGradients()
     end
 end
 
--- [[ ADVANCED EASING UTILITY ]]
 local function CreateTween(instance, properties, duration, style, direction)
     local tInfo = TweenInfo.new(duration or 0.3, style or Enum.EasingStyle.Quart, direction or Enum.EasingDirection.Out)
     local tween = TweenService:Create(instance, tInfo, properties)
@@ -359,7 +354,7 @@ function Lumina.CreateWindow(Config)
     self.Gui.Parent = gethui()
     
     self.UseCanvasGroup = Config.UseCanvasGroup
-    if self.UseCanvasGroup == nil then self.UseCanvasGroup = true end -- Default to true for premium fade
+    if self.UseCanvasGroup == nil then self.UseCanvasGroup = true end
 
     local minWidth = math.min(450, MaxSize.X)
     local minHeight = math.min(300, MaxSize.Y)
@@ -370,7 +365,7 @@ function Lumina.CreateWindow(Config)
     self.Main.Size = UDim2.new(0, initWidth, 0, initHeight)
     self.Main.Position = UDim2.new(0.5, -initWidth/2, 0.5, -initHeight/2)
     
-    local targetBgTrans = 0.05 -- slight transparency to make CanvasGroup shine
+    local targetBgTrans = 0.05
     
     if self.UseCanvasGroup then
         self.Main.GroupTransparency = 1
