@@ -234,11 +234,13 @@ local function UpdateTheme(category, color)
         end
     end
     
+    -- Update Gradients!
     if category == "GradientEdge" or category == "Accent" or category == "Stroke" then
         UpdateGradients()
     end
 end
 
+-- [[ ADVANCED EASING UTILITY ]]
 local function CreateTween(instance, properties, duration, style, direction)
     local tInfo = TweenInfo.new(duration or 0.3, style or Enum.EasingStyle.Quart, direction or Enum.EasingDirection.Out)
     local tween = TweenService:Create(instance, tInfo, properties)
@@ -332,6 +334,7 @@ function Lumina.CreateWindow(Config)
     table.insert(Lumina.Windows, self)
     
     self.Tabs = {}
+    self.SearchEntries = {}
     self.Connections = {}
     local MaxSize = Config.MaxSize or Vector2.new(900, 700)
     
@@ -354,7 +357,7 @@ function Lumina.CreateWindow(Config)
     self.Gui.Parent = gethui()
     
     self.UseCanvasGroup = Config.UseCanvasGroup
-    if self.UseCanvasGroup == nil then self.UseCanvasGroup = true end
+    if self.UseCanvasGroup == nil then self.UseCanvasGroup = true end -- Default to true for premium fade
 
     local minWidth = math.min(450, MaxSize.X)
     local minHeight = math.min(300, MaxSize.Y)
@@ -365,7 +368,7 @@ function Lumina.CreateWindow(Config)
     self.Main.Size = UDim2.new(0, initWidth, 0, initHeight)
     self.Main.Position = UDim2.new(0.5, -initWidth/2, 0.5, -initHeight/2)
     
-    local targetBgTrans = 0.05
+    local targetBgTrans = 0.05 -- slight transparency to make CanvasGroup shine
     
     if self.UseCanvasGroup then
         self.Main.GroupTransparency = 1
@@ -698,6 +701,7 @@ function Lumina.CreateWindow(Config)
         if self._Toggling then self._PendingVisible = state return end
         self._Toggling = true
         self.Visible = state
+        if not state and self.CloseSearch then self.CloseSearch() end
 
         local Main = self.Main
         local Scale = Main:FindFirstChild("WindowScale") or Instance.new("UIScale", Main)
@@ -857,6 +861,264 @@ function Lumina.CreateWindow(Config)
         end
     end)
     table.insert(self.Connections, toggleConn)
+
+    -- [[ SEARCH ]]
+    -- Every element created through Tab/Section methods is indexed in self.SearchEntries (see CreateTab)
+    local SearchOpen = false
+    local SearchToken = 0
+    local CurrentMatches = {}
+
+    local SearchBtn = Instance.new("ImageButton", Topbar)
+    SearchBtn.Name = "SearchButton"
+    SearchBtn.Size = UDim2.new(0, 16, 0, 16)
+    SearchBtn.Position = UDim2.new(1, -84, 0.5, -8)
+    SearchBtn.BackgroundTransparency = 1
+    ApplyIcon(SearchBtn, "lucide-search")
+    Register(SearchBtn, "SecondaryText", "ImageColor3")
+    SearchBtn.MouseEnter:Connect(function() CreateTween(SearchBtn, {ImageTransparency = 0.5}, 0.2) end)
+    SearchBtn.MouseLeave:Connect(function() CreateTween(SearchBtn, {ImageTransparency = 0}, 0.2) end)
+
+    local SearchBox = Instance.new("Frame", Topbar)
+    SearchBox.Name = "SearchBox"
+    SearchBox.AnchorPoint = Vector2.new(1, 0.5)
+    SearchBox.Position = UDim2.new(1, -98, 0.5, 0)
+    SearchBox.Size = UDim2.new(0, 0, 0, 26)
+    SearchBox.ClipsDescendants = true
+    SearchBox.Visible = false
+    SearchBox.BorderSizePixel = 0
+    Register(SearchBox, "MainSide")
+    Instance.new("UICorner", SearchBox).CornerRadius = UDim.new(0, 8)
+    local SearchBoxStroke = Instance.new("UIStroke", SearchBox)
+    SearchBoxStroke.Thickness = 1.2
+    SearchBoxStroke.Transparency = 0.4
+    Register(SearchBoxStroke, "Stroke", "Color")
+
+    local SearchInput = Instance.new("TextBox", SearchBox)
+    SearchInput.Size = UDim2.new(1, -20, 1, 0)
+    SearchInput.Position = UDim2.new(0, 10, 0, 0)
+    SearchInput.BackgroundTransparency = 1
+    SearchInput.ClearTextOnFocus = false
+    SearchInput.PlaceholderText = "Search elements..."
+    SearchInput.Text = ""
+    SearchInput.Font = Enum.Font.GothamMedium
+    SearchInput.TextSize = 13
+    SearchInput.TextXAlignment = Enum.TextXAlignment.Left
+    Register(SearchInput, "Text", "TextColor3")
+    Register(SearchInput, "SecondaryText", "PlaceholderColor3")
+
+    local Results = Instance.new("ScrollingFrame", self.Main)
+    Results.Name = "SearchResults"
+    Results.ZIndex = 60
+    Results.Active = true
+    Results.Visible = false
+    Results.Position = UDim2.new(0, 10, 0, 46)
+    Results.Size = UDim2.new(1, -20, 0, 0)
+    Results.BorderSizePixel = 0
+    Results.BackgroundTransparency = 0 -- fully opaque so tab content never shows through
+    Results.ScrollBarThickness = 3
+    Results.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    Results.CanvasSize = UDim2.new(0, 0, 0, 0)
+    Results.ClipsDescendants = true
+    Register(Results, "MainSide")
+    Register(Results, "Accent", "ScrollBarImageColor3")
+    Instance.new("UICorner", Results).CornerRadius = UDim.new(0, 10)
+    local ResultsStroke = Instance.new("UIStroke", Results)
+    ResultsStroke.Thickness = 1.5
+    ResultsStroke.Transparency = 0.2
+    Register(ResultsStroke, "Stroke", "Color")
+    local ResultsLayout = Instance.new("UIListLayout", Results)
+    ResultsLayout.Padding = UDim.new(0, 4)
+    ResultsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    local ResultsPad = Instance.new("UIPadding", Results)
+    ResultsPad.PaddingTop = UDim.new(0, 6)
+    ResultsPad.PaddingBottom = UDim.new(0, 6)
+    ResultsPad.PaddingLeft = UDim.new(0, 6)
+    ResultsPad.PaddingRight = UDim.new(0, 6)
+
+    local ResultRows = {}
+    local function ClearRows()
+        for _, r in ipairs(ResultRows) do r:Destroy() end
+        table.clear(ResultRows)
+    end
+
+    local function HideResults()
+        SearchToken += 1
+        local token = SearchToken
+        CreateTween(Results, {Size = UDim2.new(1, -20, 0, 0)}, 0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+        task.delay(0.22, function()
+            if token == SearchToken then Results.Visible = false; ClearRows() end
+        end)
+    end
+
+    local function Highlight(frame)
+        local hl = Instance.new("UIStroke")
+        hl.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        hl.Thickness = 2
+        hl.Color = Theme.Accent
+        hl.Transparency = 0
+        hl.Parent = frame
+        task.delay(0.5, function()
+            local t = CreateTween(hl, {Transparency = 1}, 0.9, Enum.EasingStyle.Quad)
+            t.Completed:Connect(function() hl:Destroy() end)
+        end)
+    end
+
+    local function GoToEntry(entry)
+        local tab, frame = entry.Tab, entry.Frame
+        if not (frame and frame.Parent) then return end
+        local wasActive = self.ActiveTab == tab
+        self:SelectTab(tab)
+        task.spawn(function()
+            task.wait(wasActive and 0.05 or 0.4)
+            if not frame.Parent then return end
+            local scroller = tab.Frame
+            local winScale = self.Main:FindFirstChild("WindowScale")
+            local s = (winScale and winScale.Scale > 0) and winScale.Scale or 1
+            local y = (frame.AbsolutePosition.Y - scroller.AbsolutePosition.Y) / s + scroller.CanvasPosition.Y - 8
+            CreateTween(scroller, {CanvasPosition = Vector2.new(0, math.max(0, y))}, 0.45, Enum.EasingStyle.Quart)
+            Highlight(frame)
+        end)
+    end
+
+    local function ScoreEntry(entry, q)
+        local pos = entry.Text:lower():find(q, 1, true)
+        if pos == 1 then return 3 elseif pos then return 2 end
+        local meta = (entry.Tab.Btn.Text .. " " .. (entry.Section or "")):lower()
+        if meta:find(q, 1, true) then return 1 end
+        return 0
+    end
+
+    local SetSearch
+    local function RenderResults()
+        local q = SearchInput.Text:lower():gsub("^%s+", "")
+        q = q:gsub("%s+$", "")
+        if q == "" or not SearchOpen then
+            if Results.Visible then HideResults() end
+            return
+        end
+
+        local scored = {}
+        for i, entry in ipairs(self.SearchEntries) do
+            if entry.Frame and entry.Frame.Parent then
+                local sc = ScoreEntry(entry, q)
+                if sc > 0 then table.insert(scored, {entry = entry, score = sc, order = i}) end
+            end
+        end
+        table.sort(scored, function(a, b)
+            if a.score ~= b.score then return a.score > b.score end
+            return a.order < b.order
+        end)
+
+        ClearRows()
+        CurrentMatches = {}
+        local count = math.min(#scored, 40)
+
+        if count == 0 then
+            local Empty = Instance.new("TextLabel")
+            Empty.Size = UDim2.new(1, 0, 0, 34)
+            Empty.BackgroundTransparency = 1
+            Empty.Text = "No results found"
+            Empty.Font = Enum.Font.GothamMedium
+            Empty.TextSize = 13
+            Empty.ZIndex = 61
+            Register(Empty, "SecondaryText", "TextColor3")
+            Empty.Parent = Results
+            table.insert(ResultRows, Empty)
+        end
+
+        for i = 1, count do
+            local entry = scored[i].entry
+            CurrentMatches[i] = entry
+
+            local Row = Instance.new("TextButton")
+            Row.Size = UDim2.new(1, 0, 0, 42)
+            Row.LayoutOrder = i
+            Row.BackgroundTransparency = 1
+            Row.AutoButtonColor = false
+            Row.Text = ""
+            Row.ZIndex = 61
+            Register(Row, "Accent", "BackgroundColor3")
+            Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 8)
+
+            local NameLabel = Instance.new("TextLabel", Row)
+            NameLabel.Size = UDim2.new(1, -24, 0, 18)
+            NameLabel.Position = UDim2.new(0, 12, 0, 5)
+            NameLabel.BackgroundTransparency = 1
+            NameLabel.Text = entry.Text
+            NameLabel.Font = Enum.Font.GothamMedium
+            NameLabel.TextSize = 13
+            NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+            NameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+            NameLabel.ZIndex = 62
+            Register(NameLabel, "Text", "TextColor3")
+
+            local PathLabel = Instance.new("TextLabel", Row)
+            PathLabel.Size = UDim2.new(1, -24, 0, 14)
+            PathLabel.Position = UDim2.new(0, 12, 0, 23)
+            PathLabel.BackgroundTransparency = 1
+            PathLabel.Text = entry.Tab.Btn.Text .. (entry.Section and ("  ›  " .. entry.Section) or "")
+            PathLabel.Font = Enum.Font.Gotham
+            PathLabel.TextSize = 11
+            PathLabel.TextXAlignment = Enum.TextXAlignment.Left
+            PathLabel.TextTruncate = Enum.TextTruncate.AtEnd
+            PathLabel.ZIndex = 62
+            Register(PathLabel, "SecondaryText", "TextColor3")
+
+            Row.MouseEnter:Connect(function() CreateTween(Row, {BackgroundTransparency = 0.9}, 0.2) end)
+            Row.MouseLeave:Connect(function() CreateTween(Row, {BackgroundTransparency = 1}, 0.2) end)
+            Row.MouseButton1Click:Connect(function()
+                SetSearch(false)
+                GoToEntry(entry)
+            end)
+
+            Row.Parent = Results
+            table.insert(ResultRows, Row)
+        end
+
+        local maxH = math.max(60, self.Main.Size.Y.Offset - 46 - 14)
+        local rowsH = (count == 0 and 34 or count * 46) + 12
+        SearchToken += 1
+        Results.Visible = true
+        CreateTween(Results, {Size = UDim2.new(1, -20, 0, math.min(rowsH, maxH))}, 0.25, Enum.EasingStyle.Quart)
+    end
+
+    SetSearch = function(state)
+        if state == SearchOpen then return end
+        SearchOpen = state
+        if state then
+            local width = math.clamp(self.Main.Size.X.Offset - 98 - 40, 120, 260)
+            SearchBox.Size = UDim2.new(0, 0, 0, 26)
+            SearchBox.Visible = true
+            CreateTween(SearchBox, {Size = UDim2.new(0, width, 0, 26)}, 0.35, Enum.EasingStyle.Quint)
+            CreateTween(Title, {TextTransparency = 1}, 0.2)
+            task.defer(function() SearchInput:CaptureFocus() end)
+        else
+            SearchInput:ReleaseFocus()
+            SearchInput.Text = ""
+            if Results.Visible then HideResults() end
+            CreateTween(SearchBox, {Size = UDim2.new(0, 0, 0, 26)}, 0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+            CreateTween(Title, {TextTransparency = 0}, 0.3)
+            task.delay(0.28, function()
+                if not SearchOpen then SearchBox.Visible = false end
+            end)
+        end
+    end
+    self.CloseSearch = function() SetSearch(false) end
+
+    SearchBtn.MouseButton1Click:Connect(function() SetSearch(not SearchOpen) end)
+    SearchInput:GetPropertyChangedSignal("Text"):Connect(RenderResults)
+    SearchInput.FocusLost:Connect(function(enterPressed)
+        if enterPressed and CurrentMatches[1] and SearchInput.Text ~= "" then
+            local entry = CurrentMatches[1]
+            SetSearch(false)
+            GoToEntry(entry)
+        elseif SearchInput.Text == "" then
+            SetSearch(false)
+        end
+    end)
+    table.insert(self.Connections, UserInputService.InputBegan:Connect(function(input)
+        if SearchOpen and input.KeyCode == Enum.KeyCode.Escape then SetSearch(false) end
+    end))
 
     -- Static container for Notifications
     self.ToastContainer = Instance.new("Frame")
@@ -2308,6 +2570,47 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
     function Tab:CreateThemeManager()
         -- Deprecated: Theme Manager is now automatically built into the integrated Settings Tab when Window is created.
         -- We will leave this stub.
+    end
+
+    -- [[ SEARCH INDEXING ]]
+    -- Wrap every interactive element method (not labels or section headers) so it becomes searchable from the topbar.
+    -- The hidden Settings tab is skipped: search is for elements that scripts add.
+    local function NewChildFrame(parent, before)
+        for _, c in ipairs(parent:GetChildren()) do
+            if not before[c] and c:IsA("GuiObject") then return c end
+        end
+        return nil
+    end
+
+    local function Snapshot(parent)
+        local set = {}
+        for _, c in ipairs(parent:GetChildren()) do set[c] = true end
+        return set
+    end
+
+    for _, methodName in ipairs({"CreateButton", "CreateToggle", "CreateSlider", "CreateInput", "CreateKeybind", "CreateDropdown", "CreateColorPicker"}) do
+        local original = Tab[methodName]
+        Tab[methodName] = function(self, ...)
+            local ParentFrame = self.TargetParent or TabFrame
+            local before = Snapshot(ParentFrame)
+            local result = original(self, ...)
+            local text = ...
+            if not IsHidden and type(text) == "string" and Window.SearchEntries then
+                local frame = NewChildFrame(ParentFrame, before)
+                if frame then
+                    table.insert(Window.SearchEntries, {Text = text, Frame = frame, Tab = Tab, Section = self.SectionName})
+                end
+            end
+            return result
+        end
+    end
+
+    local originalCreateSection = Tab.CreateSection
+    Tab.CreateSection = function(self, SectionName, ...)
+        -- Section headers aren't interactive, so they're not indexed; elements inside just remember the section name
+        local proxy = originalCreateSection(self, SectionName, ...)
+        if type(SectionName) == "string" then proxy.SectionName = SectionName end
+        return proxy
     end
 
     return Tab
