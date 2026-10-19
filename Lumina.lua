@@ -1,3 +1,6 @@
+-- [[ LUMINA UI LIBRARY - THE DEFINITIVE EXPERIENCE ]]
+-- [Features: Glassmorphism Blur, Advanced Easing, Dynamic Shadows, Auto-Config, Sections]
+
 local Lumina = {}
 Lumina.__index = Lumina
 Lumina.Windows = {}
@@ -79,12 +82,39 @@ local Presets = {
 -- [[ AUTO-CONFIG SYSTEM ]]
 local ConfigData = {}
 local FolderPath = "Lumina"
-local GameFolderStr = "Configs/" .. tostring(game.PlaceId)
+local LegacyGameFolderStr = "Configs/" .. tostring(game.PlaceId)
+
+-- Configs are stored per account (Lumina/Configs/<PlaceId>/<UserId>) so several accounts can use the same script
+local function GetUserId()
+    local lp = Players.LocalPlayer
+    return lp and lp.UserId or 0
+end
+local GameFolderStr = LegacyGameFolderStr .. "/" .. tostring(GetUserId())
 
 if makefolder then
     pcall(function() makefolder(FolderPath) end)
     pcall(function() makefolder(FolderPath .. "/Configs") end)
+    pcall(function() makefolder(FolderPath .. "/" .. LegacyGameFolderStr) end)
     pcall(function() makefolder(FolderPath .. "/" .. GameFolderStr) end)
+end
+
+-- One-time migration: copy configs saved before per-user folders into this account's folder
+if listfiles and isfile and readfile and writefile then
+    pcall(function()
+        local userFolder = FolderPath .. "/" .. GameFolderStr
+        local hasOwn = false
+        for _, file in ipairs(listfiles(userFolder)) do
+            if file:gsub("\\", "/"):match("([^/]+)$") then hasOwn = true break end
+        end
+        if not hasOwn then
+            for _, file in ipairs(listfiles(FolderPath .. "/" .. LegacyGameFolderStr)) do
+                local fileName = file:gsub("\\", "/"):match("([^/]+%.%w+)$")
+                if fileName and isfile(file) and (fileName:match("%.json$") or fileName == "Autoload.txt") then
+                    writefile(userFolder .. "/" .. fileName, readfile(file))
+                end
+            end
+        end
+    end)
 end
 
 local function SaveConfig(name, force)
@@ -1828,6 +1858,18 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
         SwitchBg.BackgroundColor3 = Toggled and Theme.Accent or Color3.fromRGB(50, 50, 55)
         Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
 
+        -- While on, the switch follows the Accent theme color (so theme changes recolor it immediately);
+        -- while off it's the fixed grey and must not be in the registry
+        local function ApplySwitchColor()
+            local reg = ThemeRegistry.Accent
+            for i = #reg, 1, -1 do
+                if reg[i].Instance == SwitchBg then table.remove(reg, i) end
+            end
+            if Toggled then table.insert(reg, {Instance = SwitchBg, Property = "BackgroundColor3"}) end
+            CreateTween(SwitchBg, {BackgroundColor3 = Toggled and Theme.Accent or Color3.fromRGB(50, 50, 55)}, 0.4)
+        end
+        if Toggled then table.insert(ThemeRegistry.Accent, {Instance = SwitchBg, Property = "BackgroundColor3"}) end
+
         local Dot = Instance.new("Frame", SwitchBg)
         Dot.Size = UDim2.new(0, 18, 0, 18)
         Dot.Position = Toggled and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
@@ -1850,7 +1892,7 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
 
         local function FireToggle(state, skipSave)
             Toggled = state
-            CreateTween(SwitchBg, {BackgroundColor3 = Toggled and Theme.Accent or Color3.fromRGB(50, 50, 55)}, 0.4)
+            ApplySwitchColor()
             CreateTween(Dot, {Position = Toggled and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)}, 0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
             if not NoSave and not skipSave then ConfigData[FlagStr] = Toggled; SaveConfig() end
             pcall(Callback, Toggled, skipSave)
@@ -1864,7 +1906,7 @@ function Lumina:CreateTab(Name, IconName, IsHidden)
                 local val = (cfg ~= nil) and cfg or (Default or false)
                 if val ~= Toggled then
                     Toggled = val
-                    CreateTween(SwitchBg, {BackgroundColor3 = Toggled and Theme.Accent or Color3.fromRGB(50, 50, 55)}, 0.4)
+                    ApplySwitchColor()
                     CreateTween(Dot, {Position = Toggled and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)}, 0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
                 end
                 pcall(Callback, Toggled)
